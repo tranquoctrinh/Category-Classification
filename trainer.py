@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import numpy as np
-from typing import Tuple, Dict, Optional
+from typing import Tuple, Dict
 from pathlib import Path
 
 class Trainer:

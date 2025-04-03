@@ -1,13 +1,7 @@
-import numpy as np
-import pandas as pd
-import os
-import math
-from PIL import Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
-from efficientnet_pytorch import EfficientNet
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
