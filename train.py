@@ -13,6 +13,11 @@ import random
 import os
 import numpy as np
 from sklearn.model_selection import train_test_split
+import pandas as pd
+from pathlib import Path
+
+from config import TrainingConfig
+from trainer import Trainer
 
 SAMPLE_FRAC = 1
 IMAGE_DIR = '/home/ubuntu/front/'
@@ -68,55 +73,74 @@ def eval(model, val_loader, criterion, optimizer):
     loss_score = batch_loss/len(val_loader)
     return accuracy, loss_score
 
-def main():
-    seed_everything(2323)
-    transform = transforms.Compose([
-        transforms.Resize((256, 256)),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-    batch_size = 8
-
-    data = pd.read_csv('../samples_category_text.csv').sample(frac=SAMPLE_FRAC)
-    #train_df, val_df = train_test_split(data, test_size=0.2, random_state=42)
-    #train_df = train_df.reset_index(drop=True)
-    #val_df = val_df.reset_index(drop=True)
+def create_data_loaders(config: TrainingConfig):
+    """Create training and validation data loaders"""
+    # Load data
     train_df = pd.read_csv("../train.csv")
     val_df = pd.read_csv("../val.csv")
     print('Train:', train_df.shape)
     print('Validation:', val_df.shape)
 
-    train_dataset = Image_Dataset(img_dir=IMAGE_DIR, img_data=train_df, transform=transform)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    # Create datasets
+    train_dataset = Image_Dataset(
+        img_dir=config.image_dir,
+        img_data=train_df,
+        transform=config.transforms
+    )
+    
+    val_dataset = Image_Dataset(
+        img_dir=config.image_dir,
+        img_data=val_df,
+        transform=config.transforms
+    )
 
-    val_dataset = Image_Dataset(img_dir=IMAGE_DIR, img_data=val_df, transform=transform)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size)
+    # Create data loaders
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        num_workers=config.num_workers
+    )
 
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=config.batch_size,
+        num_workers=config.num_workers
+    )
+
+    return train_loader, val_loader
+
+def main():
+    # Initialize configuration
+    config = TrainingConfig()
+    
+    # Set random seed
+    seed_everything(config.seed)
+    
+    # Create data loaders
+    train_loader, val_loader = create_data_loaders(config)
+    
+    # Initialize model
     model = Model()
-    model.to(device)
-    criterion = nn.CrossEntropyLoss()#.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=0.00001)
-
-    n_epochs = 5
-    real_val_acc = -np.Inf
-
-    for epoch in range(1, n_epochs+1):
-        print('\nEpoch = [{}]/[{}]\n'.format(epoch, n_epochs))
-        t_acc, t_loss = train(model, train_loader, criterion, optimizer)
-        print(f'\ntrain loss: {t_loss:.4f}, train acc: {t_acc:.4f}')
-        with torch.no_grad():
-            v_acc, v_loss = eval(model, val_loader, criterion, optimizer)
-            print(f'validation loss: {v_loss:.4f}, validation acc: {v_acc:.4f}\n')
-
-            network_learned = v_acc > real_val_acc
-            # Saving the best weight
-            if network_learned:
-                real_val_acc = v_acc
-                torch.save(model.state_dict(), 'model_eff_category.pt')
-                print('Detected network improvement, saving current model')
-
-    print('Best accuracy is {}'.format(real_val_acc))
+    model.to(config.device)
+    
+    # Initialize loss function and optimizer
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    
+    # Initialize trainer
+    trainer = Trainer(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        criterion=criterion,
+        optimizer=optimizer,
+        device=config.device,
+        config=config.__dict__
+    )
+    
+    # Start training
+    trainer.train(num_epochs=config.num_epochs)
 
 if __name__ == "__main__":
     main()
